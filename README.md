@@ -1,160 +1,403 @@
-# Build with AI — Shopify publishing demo
+# Shopify AI Blog Publisher
 
-A Next.js + TypeScript backend that rotates developer topics, generates an article through Gemini, validates and sanitizes the response, and publishes to the **Build with AI** Shopify blog. Includes a small public landing page and Vercel Cron configuration. No database, paid AI fallback, Shopify theme changes or external images are required.
+A Next.js and TypeScript application that generates developer-focused articles with Google Gemini and publishes them to a Shopify blog.
 
-**This demo uses Gemini, not Claude.** Claude Pro is not needed. Client-funded Claude support would be a separate provider integration and live test. Shopify uses GraphQL Admin API rather than the legacy REST endpoint in the original job description.
+The workflow selects a topic, requests structured article content, validates and sanitizes the response, and publishes through Shopify’s GraphQL Admin API. Vercel Cron provides scheduled execution.
 
-## Start on Windows
+## Features
 
-Use Node.js 22.12 or newer. Open a terminal in the project directory:
+- AI article generation with Google Gemini.
+- A configurable rotation of 12 development and AI topics.
+- Structured output containing a title, HTML body, tags, and excerpt.
+- Content validation and HTML sanitization before publishing.
+- Shopify blog discovery by handle or explicit ID.
+- Automatic Shopify access-token acquisition for same-organization apps.
+- A protected publishing endpoint.
+- Weekly or alternate-week publishing.
+- Draft mode and an automation pause setting.
+- Best-effort duplicate prevention.
+- Local preview and publishing commands.
+- Automated tests using mocked API responses.
 
-```powershell
-npm.cmd ci
-npm.cmd run setup
+No database or Shopify theme modifications are required.
+
+## Workflow
+
+```text
+Vercel Cron or authorized manual request
+    → Select the current week's topic
+    → Find the destination Shopify blog
+    → Check for an existing weekly article
+    → Generate content with Gemini
+    → Validate and sanitize the response
+    → Check again for an existing article
+    → Publish to Shopify
 ```
 
-`setup` creates `.env.local` with a random cron secret and never overwrites an existing file. Open `.env.local` in your editor and fill these three values:
+The included landing page describes the workflow. It does not display live connection or publishing status.
 
-- `GEMINI_API_KEY`: a replacement for any key exposed in screenshots; keep the Google project on the free tier.
-- `SHOPIFY_CLIENT_ID`: AI Blog Publisher's client ID.
-- `SHOPIFY_CLIENT_SECRET`: the app's client secret.
+## Technology
 
-The store `sigma-ai-blog.myshopify.com` and blog handle `build-with-ai` are already configured. Leave `SHOPIFY_BLOG_ID` blank: the app finds it automatically. `.env.local` is ignored by Git. Do not put secrets in screenshots, code, README files, or `NEXT_PUBLIC_` variables.
+- Next.js App Router
+- TypeScript
+- Google Gemini API
+- Shopify GraphQL Admin API
+- Vercel Cron
+- Zod
+- sanitize-html
+- Node.js built-in test tools
 
-## Verify before deployment
+## Requirements
 
-```powershell
-npm.cmd run check:shopify
-npm.cmd run preview:article
+- Node.js 22.12 or newer.
+- A Gemini API key with access to a supported text-generation model.
+- A Shopify store with a destination blog.
+- A Shopify app installed on that store with `read_content` and `write_content` permissions.
+- A Vercel account for hosted scheduling, if required.
+
+For the client-credentials authentication flow, the Shopify app and store must belong to the same Shopify organization.
+
+Development stores can be used for testing. Their storefronts remain password-protected.
+
+## Quick Start
+
+Clone the repository and open a terminal in its directory.
+
+```bash
+npm ci
+npm run setup
 ```
 
-The first command checks Shopify access and prints the destination blog's ID, handle and title. It makes no publishing request. The second uses Gemini quota and saves `preview/article.html` and `preview/article.json`; it publishes nothing. Review both files.
+On Windows PowerShell, use `npm.cmd` if execution policy prevents `npm` from running.
 
-Publish one freshly generated article for the current week:
+The setup command creates `.env.local` and generates a random `CRON_SECRET`. It does not overwrite an existing environment file.
 
-```powershell
-npm.cmd run publish:article -- --confirm
+Fill in these values:
+
+```dotenv
+GEMINI_API_KEY=your-gemini-api-key
+GEMINI_MODEL=gemini-3.1-flash-lite
+
+SHOPIFY_STORE_DOMAIN=your-store.myshopify.com
+SHOPIFY_CLIENT_ID=your-shopify-client-id
+SHOPIFY_CLIENT_SECRET=your-shopify-client-secret
+SHOPIFY_BLOG_HANDLE=your-blog-handle
 ```
 
-This generates again; it does not publish the saved preview. Inspect the output URL, Shopify's published status, title, tags and excerpt. Your development storefront remains password-protected. Repeating the command normally returns `already_exists` rather than generating another article.
+Keep the generated `CRON_SECRET`.
 
-Run the website and test its protected route:
+**Set `GEMINI_MODEL` explicitly to `gemini-3.1-flash-lite`.** This model was used in the successful live demonstration. If your copy of `.env.example` contains `gemini-2.5-flash`, replace that value.
 
-```powershell
-npm.cmd run dev
+The supplied demo configuration points to `sigma-ai-blog.myshopify.com` and the `build-with-ai` blog. Replace these with your own store and blog when reusing the project.
+
+Leave `SHOPIFY_BLOG_ID` blank to discover the blog by handle.
+
+## Test the Connections
+
+### Check Shopify access
+
+```bash
+npm run check:shopify
 ```
 
-In a second terminal:
+This authenticates with Shopify and returns the destination blog’s ID, handle, and title. It does not publish an article.
 
-```powershell
-npm.cmd run trigger
+### Generate a local preview
+
+```bash
+npm run preview:article
 ```
 
-Opening `/api/cron/generate-blog` in a browser without the secret returns 401. `trigger` reads the secret from `.env.local`; it never prints it. It uses the same weekly slot as direct publishing, so a completed test post is not published again.
+This calls Gemini and saves:
 
-## Push to GitHub
-
-Commit the project, including `package-lock.json`, `.env.example`, and `vercel.json`. Do not commit `.env.local`, `node_modules`, `.next`, or previews. The supplied `.gitignore` excludes them.
-
-```powershell
-git init
-git add .
-git status
-git commit -m "Build Gemini to Shopify blog automation"
+```text
+preview/article.html
+preview/article.json
 ```
 
-Create an empty GitHub repository, then use the remote/push commands GitHub provides. Inspect `git status` before committing to confirm no secrets are staged.
+Review the generated content before testing publication.
+
+The preview command consumes API quota but does not write to Shopify.
+
+### Publish an article
+
+```bash
+npm run publish:article -- --confirm
+```
+
+This generates a new article for the current publishing week and sends it to Shopify. It does not publish the previously saved preview.
+
+The result includes the article ID, publication status, and storefront URL.
+
+If an article already exists for that week, the command normally returns:
+
+```text
+already_exists
+```
+
+### Test the HTTP endpoint
+
+Start the application:
+
+```bash
+npm run dev
+```
+
+In another terminal, run:
+
+```bash
+npm run trigger
+```
+
+The trigger command reads `CRON_SECRET` from `.env.local` and sends an authorized request to:
+
+```text
+http://localhost:3000/api/cron/generate-blog
+```
+
+A request without a valid secret is rejected. The HTTP endpoint and local publishing command use the same weekly article identifier.
+
+## Environment Variables
+
+| Variable | Purpose |
+| --- | --- |
+| `GEMINI_API_KEY` | Required Gemini API key. |
+| `GEMINI_MODEL` | Set explicitly to `gemini-3.1-flash-lite`, the model used in the live demo. |
+| `SHOPIFY_STORE_DOMAIN` | Your `myshopify.com` domain, without a scheme or path. |
+| `SHOPIFY_CLIENT_ID` | Shopify app client ID. |
+| `SHOPIFY_CLIENT_SECRET` | Shopify app client secret. |
+| `SHOPIFY_ADMIN_ACCESS_TOKEN` | Optional alternative for an app with a suitable existing access token. Leave blank when using client credentials. |
+| `SHOPIFY_API_VERSION` | Shopify API version. The demo uses `2026-07`. |
+| `SHOPIFY_BLOG_HANDLE` | Destination blog handle, such as `build-with-ai`. |
+| `SHOPIFY_BLOG_ID` | Optional numeric blog ID or Shopify GraphQL ID. Overrides handle-based discovery. |
+| `BLOG_AUTHOR` | Article author name. The supplied configuration uses `Sigma Web Hub`. |
+| `CRON_SECRET` | Secret protecting the HTTP endpoint. Must contain at least 32 characters. Generated by setup. |
+| `PUBLISH_ARTICLES` | `true` publishes immediately; `false` creates drafts. |
+| `AUTOMATION_ENABLED` | Set to `false` to pause publishing. |
+| `PUBLISH_EVERY_WEEKS` | `1` for weekly publishing or `2` for alternate weeks. |
+| `SCHEDULE_ANCHOR` | A Monday date in `YYYY-MM-DD` format used to calculate topic rotation and alternate weeks. |
+
+Store credentials only in `.env.local` or your hosting platform’s environment settings. Never expose them through `NEXT_PUBLIC_` variables.
 
 ## Deploy to Vercel
 
-1. Import the GitHub repository as a Next.js project.
-2. Select Node.js 22.x or newer. Leave the standard Next.js build and output settings.
-3. Before deployment, add the variables from `.env.local` to **Production** environment settings. At minimum: Gemini key, Shopify client ID/secret, store domain, blog handle, and the same generated `CRON_SECRET`. Use the other values from `.env.example` as needed. `.env.local` is not uploaded by GitHub.
-4. Deploy. The repository's `vercel.json` registers the cron job automatically on production deployments. No additional cron service or secret header configuration is needed.
-5. Check **Project Settings → Cron Jobs** for `/api/cron/generate-blog`.
-6. To run immediately, use `npm.cmd run trigger -- https://YOUR-PROJECT.vercel.app`. Verify the hostname and type `yes` when asked. Vercel deployment protection may block external manual calls; in that case use the dashboard's Cron **Run** action while signed in.
-7. Inspect runtime logs and the article in Shopify. If this week's post already exists from local testing, `already_exists` is the correct result. Do not delete it just to test the schedule.
+1. Push the repository to GitHub.
+2. Import it into Vercel as a Next.js project.
+3. Select a supported Node.js version satisfying the project’s requirements.
+4. Add your environment variables to Vercel’s **Production** environment.
+5. Set `GEMINI_MODEL=gemini-3.1-flash-lite` explicitly.
+6. Deploy the project.
+7. Confirm the publishing route appears under **Settings → Cron Jobs**.
+8. Inspect deployment and runtime logs before relying on scheduled publishing.
 
-**Deployment registers the schedule; it does not immediately publish.** The schedule is `0 8 * * 1`: Monday 08:00 UTC / 13:00 Pakistan time. Hobby timing can occur anywhere within that hour. Vercel cron runs only against production. Preview deployments explicitly reject publishing. Enable Fluid Compute if your project does not already have it: the route requests a 300-second duration; Gemini itself has a 100-second timeout.
+Your local `.env.local` file is excluded from Git and will not be uploaded through GitHub. Add its values separately in Vercel.
 
-Vercel Hobby is limited to personal, non-commercial use. A client-facing commercial deployment requires an appropriate hosting plan; do not assume a free plan is eligible for commercial use. You can demonstrate the entire generation/publishing flow locally at no hosting charge. Gemini free quotas depend on account/model availability; leave billing disabled to keep the $0 constraint. The app never enables billing or changes provider when quota is exhausted.
+The route requests a maximum execution duration of 300 seconds. Confirm that your Vercel project configuration supports this duration.
 
-## Environment reference
+### Run immediately after deployment
 
-| Variable | Default / purpose |
-| --- | --- |
-| GEMINI_API_KEY | Required, server only |
-| GEMINI_MODEL | `gemini-2.5-flash`; choose an available free-tier text model supporting structured output |
-| SHOPIFY_STORE_DOMAIN | `sigma-ai-blog.myshopify.com`; no scheme or path |
-| SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET | Same-organization installed app credentials |
-| SHOPIFY_ADMIN_ACCESS_TOKEN | Optional alternative for an existing suitable token; leave blank with client credentials |
-| SHOPIFY_API_VERSION | `2026-07` |
-| SHOPIFY_BLOG_HANDLE | `build-with-ai` |
-| SHOPIFY_BLOG_ID | Optional numeric ID or `gid://shopify/Blog/...`; takes precedence over handle |
-| BLOG_AUTHOR | `Sigma Web Hub` |
-| CRON_SECRET | Required for the HTTP route, at least 32 characters; generated by setup |
-| PUBLISH_ARTICLES | `true`; set `false` for drafts |
-| AUTOMATION_ENABLED | `true`; set `false` to pause |
-| PUBLISH_EVERY_WEEKS | `1`; use `2` for alternate weeks |
-| SCHEDULE_ANCHOR | `2026-09-28`; must be a Monday in UTC |
+From your local project directory:
 
-For every-other-week publishing, keep the weekly Vercel schedule and set `PUBLISH_EVERY_WEEKS=2`. The code skips alternate weeks anchored to `SCHEDULE_ANCHOR`. Update `lib/topics.ts` to edit the 12-topic rotation. Topics repeat after the list ends. A weekly handle is stable even if you edit the topic list.
+```bash
+npm run trigger -- https://YOUR-PROJECT.vercel.app
+```
 
-## Reliability and scope
+The command asks you to confirm the destination before sending the cron secret.
 
-- Checks the Bearer secret before making external calls; responses are never cached.
-- Gets a fresh Shopify token per run; the 24-hour client-credentials token is not saved as a permanent environment value. The app and store must be in the same Shopify organization, with the app installed and `read_content,write_content` approved.
-- Validates title, summary, tags and body; requires headings and at least 300 words after cleaning. Removes scripts, attributes, links, images and unsupported HTML.
-- Requires Gemini's normal completion status and rejects truncated or malformed output.
-- Checks for the same weekly handle before and after generation. A process-local guard also stops concurrent requests in the same instance.
-- **Duplicate prevention is best effort, not exactly-once delivery.** Shopify search indexing and concurrent serverless instances can race. Strict cross-instance guarantees require a durable lock/idempotency design beyond this database-free demo. Avoid simultaneous manual and scheduled runs.
-- Does not automatically retry article creation because a timeout might follow a successful write. Inspect Shopify before retrying. Vercel cron does not provide automatic failed-job retries here; inspect logs and manually rerun as needed.
-- Drafts occupy the weekly slot too. Changing `PUBLISH_ARTICLES` to true does not automatically publish an existing draft; publish that draft in Shopify.
-- Logs only run IDs and safe status/error messages, never credentials or provider response bodies.
-- The public landing page is static descriptive content, not a live health dashboard.
-- Model-generated text is not fact-checked against live sources. Review the first outputs; SEO rankings are not guaranteed.
+If deployment protection blocks the request, use the Cron **Run** action in the Vercel dashboard.
+
+An article created during local testing already occupies that week’s publishing slot. Receiving `already_exists` after deployment is expected.
+
+## Publishing Schedule
+
+The included `vercel.json` contains:
+
+```json
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/generate-blog",
+      "schedule": "0 8 * * 1"
+    }
+  ]
+}
+```
+
+This schedules publishing every Monday at:
+
+- **08:00 UTC**
+- **13:00 Pakistan time**
+
+Vercel registers the schedule from the production deployment. Deployment itself does not immediately publish an article.
+
+On Vercel Hobby, execution may occur within the scheduled hour. Preview deployments are explicitly prevented from publishing by the route.
+
+### Publish every other week
+
+Keep the weekly cron expression and set:
+
+```dotenv
+PUBLISH_EVERY_WEEKS=2
+```
+
+The application skips alternate weeks based on `SCHEDULE_ANCHOR`.
+
+### Pause publishing
+
+Set:
+
+```dotenv
+AUTOMATION_ENABLED=false
+```
+
+Redeploy after changing Vercel environment variables so the new settings take effect.
+
+## Customize the Content
+
+Edit `lib/topics.ts` to change the topic rotation.
+
+The included topics cover AI integration, development workflows, API security, debugging, testing, and automation. Topics repeat after the rotation finishes.
+
+Edit `lib/gemini.ts` to adjust the audience, tone, requested article length, and generation instructions.
+
+The current prompt requests 600–900 words. Validation requires at least 300 words after HTML cleaning; it does not enforce the full requested range.
+
+Generated articles include:
+
+- A title.
+- An HTML body with section headings.
+- Tags.
+- A summary excerpt.
+
+Links, images, scripts, styling, and HTML attributes are removed from the article body by the sanitizer.
+
+## Reliability and Limitations
+
+### Duplicate prevention
+
+Each publishing week has a predictable article handle. The application checks for that handle before and after AI generation.
+
+A process-local guard also prevents overlapping HTTP runs within the same server instance.
+
+**This is best-effort duplicate prevention, not an exactly-once guarantee.** Concurrent serverless instances and Shopify search-indexing delays can still create races. Strict guarantees require durable coordination beyond this database-free implementation.
+
+Avoid running manual and scheduled publication simultaneously.
+
+### Failure handling
+
+The application rejects malformed, truncated, or invalid AI output before publication.
+
+It does not automatically retry article creation because a failed response may occur after Shopify has accepted the article. Inspect the store before retrying an ambiguous publishing failure.
+
+Failure notifications and automatic retry scheduling are not included. Check runtime logs and rerun manually when appropriate.
+
+### Draft mode
+
+Set:
+
+```dotenv
+PUBLISH_ARTICLES=false
+```
+
+to create drafts.
+
+Drafts occupy the weekly publishing slot. Changing this setting to `true` does not publish an existing draft automatically; publish it through Shopify.
+
+### Content quality
+
+Generated content is not independently fact-checked against live sources. Review initial outputs and adjust the prompts for your audience.
+
+The project does not guarantee search-engine rankings or content accuracy.
+
+### API usage and hosting
+
+Gemini free-tier availability and quotas depend on the model and account. The application does not enable billing or switch to a paid provider when a request fails.
+
+Vercel Hobby is intended for personal, non-commercial use. Choose an appropriate hosting plan for commercial deployments.
+
+The generation and Shopify publishing workflow can also run locally without hosted scheduling.
+
+## Security
+
+- The HTTP publishing route requires a Bearer token matching `CRON_SECRET`.
+- Authorization is checked before external API calls.
+- Responses from the publishing route are not cached.
+- Credentials remain server-side.
+- Logs contain run identifiers and controlled error messages rather than credentials.
+- Generated HTML is sanitized before publication.
+- Preview deployments cannot publish through the HTTP route.
+
+The supplied `.gitignore` excludes:
+
+```text
+.env.local
+node_modules/
+.next/
+.vercel/
+preview/
+.test-build/
+```
+
+Commit `.env.example` with placeholder values only. Check staged files before pushing to a public repository.
+
+## Verification Status
+
+The following checks were completed during development:
+
+- 18 automated tests passed.
+- Strict TypeScript checking passed.
+- The dependency audit reported no known vulnerabilities at the time of testing.
+- Shopify authentication and blog discovery succeeded.
+- Gemini generated a valid article using `gemini-3.1-flash-lite`.
+- An article was published to the development store.
+- The saved article’s publication status, headings, tags, and excerpt were verified through Shopify’s API.
+- A repeated publishing run returned `already_exists`.
+
+The following remain unverified:
+
+- Successful production build completion.
+- Deployment to Vercel.
+- Execution from an actual Vercel cron schedule.
+
+The development environment blocked the production build with a process-creation permission error. Run the build in your own environment and verify the deployed schedule before relying on unattended publishing.
+
+## Development Checks
+
+```bash
+npm test
+npm run typecheck
+npm run build
+```
+
+Automated tests use mocked API responses and do not require credentials.
+
+They cover authorization, preview-deployment protection, scheduling, configuration validation, HTML sanitization, successful publishing, duplicate checks, draft creation, paused execution, quota errors, and ambiguous publishing timeouts.
 
 ## Troubleshooting
 
-| Result | Action |
+| Result | Suggested action |
 | --- | --- |
-| CONFIGURATION_ERROR | Fill the named environment variables; redeploy after Vercel changes |
-| Shopify authentication HTTP 400/401/403 | Check client credentials, installation, and same-organization ownership |
-| SHOPIFY_GRAPHQL_ERROR | Confirm scopes and API version; release/reinstall after scope changes |
-| BLOG_NOT_FOUND | Confirm the blog is saved and its handle is `build-with-ai` |
-| Gemini HTTP 400/404 | Check model availability and structured-output support |
-| RATE_LIMITED | Free quota is exhausted; wait or select another eligible free model manually |
-| INVALID_AI_OUTPUT / AI_GENERATION_INCOMPLETE | Nothing published; review model settings and retry within quota |
-| UPSTREAM_UNREACHABLE during publishing | Inspect Shopify before retrying to avoid duplicates |
-| already_exists | This week's article or draft is already present |
-| 401 | Cron secret missing from request or does not match |
-| 503 | Required server configuration is missing |
-| Store password page | Expected for a development store; use its storefront password |
+| `CONFIGURATION_ERROR` | Fill in the named environment variables and verify their format. |
+| Shopify authentication failure | Check app credentials, installation, and same-organization ownership. |
+| `SHOPIFY_GRAPHQL_ERROR` | Verify API version and approved content permissions. |
+| `BLOG_NOT_FOUND` | Check the destination blog handle or ID. |
+| Gemini HTTP 400 or 404 | Check model availability and structured-output support. Set the tested model explicitly. |
+| `RATE_LIMITED` | Check quota and rate limits; wait before retrying. |
+| `INVALID_AI_OUTPUT` | The generated content failed validation and was not published. |
+| `AI_GENERATION_INCOMPLETE` | Generation was blocked or truncated; no article was published. |
+| `UPSTREAM_UNREACHABLE` | Check service availability. Inspect Shopify before retrying a publishing attempt. |
+| `already_exists` | An article or draft already occupies the current week’s slot. |
+| HTTP 401 | The request’s cron secret is missing or incorrect. |
+| HTTP 403 on a preview deployment | Publishing is intentionally disabled outside production. |
+| HTTP 503 | Check the response message for missing application configuration. |
+| Storefront password page | Expected for a Shopify development store. |
 
-## Development checks
-
-```powershell
-npm.cmd test
-npm.cmd run typecheck
-npm.cmd run build
-```
-
-Automated tests use mocked API responses and no credentials. They cover authorization, preview isolation, UTC scheduling, validation, HTML cleaning, success, duplicate checks, drafts, paused runs, quota failures and ambiguous timeouts. They cannot prove that your live credentials or free API quota work. Complete the live checks above after adding keys.
-
-## Verification at delivery
-
-- 18 automated tests passed using Node's built-in test tools.
-- Strict TypeScript checking passed.
-- Dependency audit reported zero known vulnerabilities at installation time.
-- Production build was attempted but the build environment denied process creation (`spawn EPERM`). Production build completion is **not verified**; run `npm.cmd run build` in your normal terminal or review the Vercel build result.
-- Live Gemini quota, Shopify authentication, article publishing and a real Vercel cron execution remain unverified until you add credentials and deploy.
-- The requested destination was `D:\Jibran\shopify-ai-blog`, but this chat did not receive write access to that folder. Extract the supplied source archive there, then run `npm.cmd ci` and `npm.cmd run setup`.
-
-## Official references
+## Documentation
 
 - [Gemini structured outputs](https://ai.google.dev/gemini-api/docs/structured-output)
 - [Gemini pricing and free-tier availability](https://ai.google.dev/gemini-api/docs/pricing)
-- [Shopify same-organization authentication](https://shopify.dev/docs/apps/build/authentication-authorization/client-credentials-grant)
-- [Shopify articleCreate](https://shopify.dev/docs/api/admin-graphql/latest/mutations/articleCreate)
-- [Vercel cron security and management](https://vercel.com/docs/cron-jobs/manage-cron-jobs)
+- [Shopify client-credentials authentication](https://shopify.dev/docs/apps/build/authentication-authorization/client-credentials-grant)
+- [Shopify article creation](https://shopify.dev/docs/api/admin-graphql/latest/mutations/articleCreate)
+- [Vercel cron management](https://vercel.com/docs/cron-jobs/manage-cron-jobs)
 - [Vercel cron limits](https://vercel.com/docs/cron-jobs/usage-and-pricing)
